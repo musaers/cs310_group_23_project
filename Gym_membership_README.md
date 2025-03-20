@@ -9,7 +9,7 @@ A smart, efficient, and user-friendly application for managing gym memberships, 
 ## Project Team
 
 - Ahmet Musa Ersoy (30646)
-
+- Emir Algan Mere (30655)
 
 ## Overview
 

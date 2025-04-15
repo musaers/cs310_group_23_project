@@ -33,33 +33,33 @@ import 'screens/notifications/notifications_screen.dart';
 
 final Map<String, WidgetBuilder> appRoutes = {
   // Auth routes
-  '/login': (context) => LoginScreen(),
-  '/signup': (context) => SignupScreen(),
-  '/forgot-password': (context) => ForgotPasswordScreen(),
+  '/login': (context) => const LoginScreen(),
+  '/signup': (context) => const SignupScreen(),
+  '/forgot-password': (context) => const ForgotPasswordScreen(),
   
   // Home routes
-  '/home': (context) => HomeScreen(),
-  '/welcome': (context) => WelcomeScreen(),
+  '/home': (context) => const HomeScreen(),
+  '/welcome': (context) => const WelcomeScreen(),
   
   // Classes routes
-  '/classes': (context) => ClassesScreen(),
-  '/class-detail': (context) => ClassDetailScreen(),
+  '/classes': (context) => const ClassesScreen(),
+  '/class-detail': (context) => const ClassDetailScreen(),
   
   // Reservations routes
-  '/reservations': (context) => ReservationsScreen(),
-  '/qr-code': (context) => QRCodeScreen(),
+  '/reservations': (context) => const ReservationsScreen(),
+  '/qr-code': (context) => const QRCodeScreen(),
   
   // Profile routes
-  '/profile': (context) => ProfileScreen(),
-  '/edit-profile': (context) => EditProfileScreen(),
+  '/profile': (context) => const ProfileScreen(),
+  '/edit-profile': (context) => const EditProfileScreen(),
   
   // Payment routes
-  '/payment': (context) => PaymentScreen(),
-  '/membership-plans': (context) => MembershipPlansScreen(),
+  '/payment': (context) => const PaymentScreen(),
+  '/membership-plans': (context) => const MembershipPlansScreen(),
   
   // Other routes
-  '/leaderboard': (context) => LeaderboardScreen(),
-  '/feedback': (context) => FeedbackScreen(),
-  '/facilities': (context) => FacilitiesScreen(),
-  '/notifications': (context) => NotificationsScreen(),
+  '/leaderboard': (context) => const LeaderboardScreen(),
+  '/feedback': (context) => const FeedbackScreen(),
+  '/facilities': (context) => const FacilitiesScreen(),
+  '/notifications': (context) => const NotificationsScreen(),
 };

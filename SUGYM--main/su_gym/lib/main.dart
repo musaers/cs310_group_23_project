@@ -1,23 +1,35 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'routes.dart';
-import 'screens/home/welcome_screen.dart';
 
 void main() {
   runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({Key? key}) : super(key: key);
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Fitness App',
+      title: 'SUGYM+',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         primarySwatch: Colors.blue,
-        visualDensity: VisualDensity.adaptivePlatformDensity,
+        // Tüm metin temaları için Ubuntu fontunu ayarlama
+        textTheme: GoogleFonts.ubuntuTextTheme(Theme.of(context).textTheme),
+        // Butonlar vb. için Ubuntu fontunu ayarlama
+        primaryTextTheme: GoogleFonts.ubuntuTextTheme(
+          Theme.of(context).primaryTextTheme,
+        ),
+        useMaterial3: true,
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.blue,
+          foregroundColor: Colors.white,
+          elevation: 0,
+        ),
       ),
-      home: const WelcomeScreen(),
+      initialRoute: '/login', // Başlangıç rotası login olarak ayarlandı
       routes: appRoutes,
     );
   }

@@ -11,6 +11,7 @@ A smart, efficient, and user-friendly application for managing gym memberships, 
 - Ahmet Musa Ersoy (30646)
 - Emir Algan Mere (30655)
 - Zeynep Dağcı (31061)
+- Deren Olgun (32129)
 
 ## Overview
 

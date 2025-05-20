@@ -1,6 +1,7 @@
 // lib/screens/classes/classes_screen.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // Firestore için
 
 class ClassesScreen extends StatefulWidget {
   const ClassesScreen({super.key});
@@ -9,80 +10,80 @@ class ClassesScreen extends StatefulWidget {
   _ClassesScreenState createState() => _ClassesScreenState();
 }
 
-class _ClassesScreenState extends State<ClassesScreen> with SingleTickerProviderStateMixin {
+class _ClassesScreenState extends State<ClassesScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
   int _selectedDayIndex = 0;
-  
+  bool _isLoading = true;
+  String _errorMessage = '';
+
+  // Dinamik ders listesi - artık boş başlıyor
+  List<Map<String, dynamic>> _classes = [];
+
   // Örnek hafta günleri
   final List<DateTime> _weekDays = List.generate(
     5,
     (index) => DateTime.now().add(Duration(days: index)),
   );
-  
-  // Örnek ders verileri
-  final List<Map<String, dynamic>> _classes = [
-    {
-      'id': '1',
-      'name': 'Full Body',
-      'startTime': '08:00',
-      'endTime': '08:45',
-      'trainer': 'John Doe',
-      'capacity': 20,
-      'enrolled': 15,
-      'day': 'Monday'
-    },
-    {
-      'id': '2',
-      'name': 'Pilates',
-      'startTime': '10:00',
-      'endTime': '10:45',
-      'trainer': 'Jane Smith',
-      'capacity': 15,
-      'enrolled': 12,
-      'day': 'Monday'
-    },
-    {
-      'id': '3',
-      'name': 'Full Body',
-      'startTime': '12:00',
-      'endTime': '12:45',
-      'trainer': 'Mike Johnson',
-      'capacity': 20,
-      'enrolled': 17,
-      'day': 'Monday'
-    },
-    {
-      'id': '4',
-      'name': 'Full Body',
-      'startTime': '17:00',
-      'endTime': '17:45',
-      'trainer': 'Sarah Williams',
-      'capacity': 20,
-      'enrolled': 4,
-      'day': 'Monday'
-    },
-    {
-      'id': '5',
-      'name': 'Cycling',
-      'startTime': '19:00',
-      'endTime': '19:45',
-      'trainer': 'Robert Brown',
-      'capacity': 25,
-      'enrolled': 21,
-      'day': 'Monday'
-    },
-  ];
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _loadClasses(); // Firebase'den dersleri yükle
   }
 
   @override
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  // Firebase'den dersleri yükleme fonksiyonu
+  Future<void> _loadClasses() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = '';
+    });
+
+    try {
+      // Firestore'dan dersleri çek
+      final QuerySnapshot snapshot = await FirebaseFirestore.instance
+          .collection('classes')
+          .orderBy('day')
+          .orderBy('startTime')
+          .get();
+
+      // Verileri işle ve _classes listesine ekle
+      final List<Map<String, dynamic>> loadedClasses = snapshot.docs.map((doc) {
+        Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+        return {
+          'id': doc.id,
+          'name': data['name'] ?? '',
+          'startTime': data['startTime'] ?? '',
+          'endTime': data['endTime'] ?? '',
+          'trainer': data['trainer'] ?? '',
+          'capacity': data['capacity'] ?? 0,
+          'enrolled': data['enrolled'] ?? 0,
+          'day': data['day'] ?? '',
+          // Diğer alanlar...
+        };
+      }).toList();
+
+      // State'i güncelle
+      setState(() {
+        _classes = loadedClasses;
+        _isLoading = false;
+      });
+
+      print('Loaded ${_classes.length} classes from Firestore');
+    } catch (e) {
+      print('Error loading classes: $e');
+      setState(() {
+        _errorMessage = 'Dersler yüklenirken bir hata oluştu: $e';
+        _isLoading = false;
+      });
+    }
   }
 
   @override
@@ -106,14 +107,33 @@ class _ClassesScreenState extends State<ClassesScreen> with SingleTickerProvider
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildAllClassesTab(),
-          _buildMyReservationsTab(),
-          _buildFavoritesTab(),
-        ],
-      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _errorMessage.isNotEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.error_outline,
+                          color: Colors.red, size: 60),
+                      const SizedBox(height: 16),
+                      Text(_errorMessage),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: _loadClasses,
+                        child: const Text('Tekrar Dene'),
+                      ),
+                    ],
+                  ),
+                )
+              : TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _buildAllClassesTab(),
+                    _buildMyReservationsTab(),
+                    _buildFavoritesTab(),
+                  ],
+                ),
       bottomNavigationBar: BottomNavigationBar(
         items: const [
           BottomNavigationBarItem(
@@ -148,46 +168,52 @@ class _ClassesScreenState extends State<ClassesScreen> with SingleTickerProvider
       children: [
         _buildDateSelector(),
         Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: _classes.length,
-            itemBuilder: (context, index) {
-              return _buildClassCard(_classes[index]);
-            },
-          ),
+          child: _classes.isEmpty
+              ? const Center(child: Text('Henüz ders bulunmuyor.'))
+              : ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: _classes.length,
+                  itemBuilder: (context, index) {
+                    return _buildClassCard(_classes[index]);
+                  },
+                ),
         ),
       ],
     );
   }
-  
+
   // Rezervasyonlar sekmesi
   Widget _buildMyReservationsTab() {
-    final reservedClasses = _classes.where((c) => c['id'] == '1' || c['id'] == '3').toList();
-    
+    final reservedClasses =
+        _classes.where((c) => c['id'] == '1' || c['id'] == '3').toList();
+
     return reservedClasses.isEmpty
         ? const Center(child: Text('Henüz rezervasyon yapmadınız.'))
         : ListView.builder(
             padding: const EdgeInsets.all(16),
             itemCount: reservedClasses.length,
             itemBuilder: (context, index) {
-              final classInfo = Map<String, dynamic>.from(reservedClasses[index]);
+              final classInfo =
+                  Map<String, dynamic>.from(reservedClasses[index]);
               classInfo['isReserved'] = true;
               return _buildClassCard(classInfo);
             },
           );
   }
-  
+
   // Favoriler sekmesi
   Widget _buildFavoritesTab() {
-    final favoriteClasses = _classes.where((c) => c['id'] == '2' || c['id'] == '5').toList();
-    
+    final favoriteClasses =
+        _classes.where((c) => c['id'] == '2' || c['id'] == '5').toList();
+
     return favoriteClasses.isEmpty
         ? const Center(child: Text('Henüz favori ders eklemediniz.'))
         : ListView.builder(
             padding: const EdgeInsets.all(16),
             itemCount: favoriteClasses.length,
             itemBuilder: (context, index) {
-              final classInfo = Map<String, dynamic>.from(favoriteClasses[index]);
+              final classInfo =
+                  Map<String, dynamic>.from(favoriteClasses[index]);
               classInfo['isFavorite'] = true;
               return _buildClassCard(classInfo);
             },
@@ -205,7 +231,7 @@ class _ClassesScreenState extends State<ClassesScreen> with SingleTickerProvider
         itemBuilder: (context, index) {
           final day = _weekDays[index];
           final isSelected = index == _selectedDayIndex;
-          
+
           return GestureDetector(
             onTap: () {
               setState(() {
@@ -250,12 +276,12 @@ class _ClassesScreenState extends State<ClassesScreen> with SingleTickerProvider
   Widget _buildClassCard(Map<String, dynamic> classInfo) {
     final bool isReserved = classInfo['isReserved'] ?? false;
     final bool isFavorite = classInfo['isFavorite'] ?? false;
-    
+
     // Doluluk oranı
-    final int capacity = classInfo['capacity'];
-    final int enrolled = classInfo['enrolled'];
-    final double occupancyRate = enrolled / capacity;
-    
+    final int capacity = classInfo['capacity'] ?? 0;
+    final int enrolled = classInfo['enrolled'] ?? 0;
+    final double occupancyRate = capacity > 0 ? enrolled / capacity : 0;
+
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       elevation: 2,
@@ -265,7 +291,7 @@ class _ClassesScreenState extends State<ClassesScreen> with SingleTickerProvider
       child: InkWell(
         onTap: () {
           Navigator.pushNamed(
-            context, 
+            context,
             '/class-detail',
             arguments: classInfo,
           );
@@ -279,7 +305,7 @@ class _ClassesScreenState extends State<ClassesScreen> with SingleTickerProvider
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    classInfo['name'],
+                    classInfo['name'] ?? '',
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 18,
@@ -311,7 +337,7 @@ class _ClassesScreenState extends State<ClassesScreen> with SingleTickerProvider
               const SizedBox(height: 8),
               Text('Day: ${classInfo['day']}'),
               const SizedBox(height: 12),
-              
+
               // Doluluk göstergesi
               Row(
                 children: [
@@ -321,9 +347,11 @@ class _ClassesScreenState extends State<ClassesScreen> with SingleTickerProvider
                       child: LinearProgressIndicator(
                         value: occupancyRate,
                         backgroundColor: Colors.grey.shade200,
-                        color: occupancyRate > 0.8 
-                          ? Colors.red 
-                          : (occupancyRate > 0.5 ? Colors.orange : Colors.green),
+                        color: occupancyRate > 0.8
+                            ? Colors.red
+                            : (occupancyRate > 0.5
+                                ? Colors.orange
+                                : Colors.green),
                         minHeight: 10,
                       ),
                     ),
@@ -336,7 +364,7 @@ class _ClassesScreenState extends State<ClassesScreen> with SingleTickerProvider
                 ],
               ),
               const SizedBox(height: 16),
-              
+
               // Rezervasyon/İptal düğmesi
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
@@ -361,7 +389,7 @@ class _ClassesScreenState extends State<ClassesScreen> with SingleTickerProvider
                       onPressed: () {
                         // Rezervasyon yap
                         Navigator.pushNamed(
-                          context, 
+                          context,
                           '/reservations',
                           arguments: classInfo,
                         );

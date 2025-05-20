@@ -7,13 +7,28 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
+import 'package:firebase_analytics/firebase_analytics.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:mockito/mockito.dart';
 import 'package:su_gym/main.dart';
 
+// Mock FirebaseAnalytics for testing
+class MockFirebaseAnalytics extends Mock implements FirebaseAnalytics {}
+
+// Mock for Firebase initialization
+class MockFirebaseApp extends Mock implements FirebaseApp {}
+
 void main() {
+  // Set up mocks
+  late MockFirebaseAnalytics mockAnalytics;
+
+  setUp(() {
+    mockAnalytics = MockFirebaseAnalytics();
+  });
+
   testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+    // Build our app and trigger a frame with the mock analytics
+    await tester.pumpWidget(MyApp(analytics: mockAnalytics));
 
     // Verify that our counter starts at 0.
     expect(find.text('0'), findsOneWidget);

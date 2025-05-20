@@ -35,6 +35,7 @@ import 'screens/payment/membership_plans_screen.dart';
 
 // İmport edilen dosyalara yeni ekranları ekleyin
 import 'screens/admin/admin_class_create_screen.dart';
+import 'screens/admin/admin_class_edit_screen.dart'; // Yeni eklendi
 import 'screens/admin/admin_classes_screen.dart';
 
 // Other screens
@@ -66,6 +67,8 @@ final Map<String, WidgetBuilder> appRoutes = {
 
   '/admin/classes': (context) => const AdminClassesScreen(),
   '/admin/classes/create': (context) => const AdminClassCreateScreen(),
+  '/admin/classes/edit': (context) =>
+      const AdminClassEditScreen(), // Yeni eklenen rota
 
   // Add to appRoutes map
   '/admin/memberships': (context) => const AdminMembershipsScreen(),

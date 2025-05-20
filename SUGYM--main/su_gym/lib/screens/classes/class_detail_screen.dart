@@ -1,4 +1,3 @@
-// lib/screens/classes/class_detail_screen.dart
 import 'package:flutter/material.dart';
 
 class ClassDetailScreen extends StatelessWidget {

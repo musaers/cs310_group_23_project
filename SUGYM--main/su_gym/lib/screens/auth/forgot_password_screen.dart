@@ -1,6 +1,7 @@
-// lib/screens/auth/forgot_password_screen.dart
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../../services/service_provider.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -14,6 +15,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final TextEditingController _emailController = TextEditingController();
   bool _isLoading = false;
   bool _emailSent = false;
+  String _errorMessage = '';
 
   @override
   void dispose() {
@@ -21,35 +23,62 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     super.dispose();
   }
 
-  // E-posta kontrolü
+  // Email validation
   String? _validateEmail(String? value) {
     if (value == null || value.isEmpty) {
-      return 'E-posta adresi giriniz';
+      return 'Please enter your email address';
     }
 
     final emailRegex = RegExp(
       r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
     );
     if (!emailRegex.hasMatch(value)) {
-      return 'Geçerli bir e-posta adresi giriniz';
+      return 'Please enter a valid email address';
     }
 
     return null;
   }
 
-  // Şifre sıfırlama e-postası gönderme
-  void _sendResetEmail() {
-    if (_formKey.currentState!.validate()) {
-      setState(() {
-        _isLoading = true;
-      });
+  // Send password reset email
+  Future<void> _sendResetEmail() async {
+    if (!_formKey.currentState!.validate()) return;
 
-      // Simüle edilmiş e-posta gönderme
-      Future.delayed(const Duration(seconds: 2), () {
-        setState(() {
-          _isLoading = false;
-          _emailSent = true;
-        });
+    setState(() {
+      _isLoading = true;
+      _errorMessage = '';
+    });
+
+    try {
+      // Get auth service from context
+      final authService = context.authService;
+
+      // Send password reset email
+      await authService.resetPassword(_emailController.text.trim());
+
+      // Show success message
+      setState(() {
+        _emailSent = true;
+      });
+    } on FirebaseAuthException catch (e) {
+      setState(() {
+        switch (e.code) {
+          case 'user-not-found':
+            _errorMessage = 'No user found with this email address.';
+            break;
+          case 'invalid-email':
+            _errorMessage = 'The email address is not valid.';
+            break;
+          default:
+            _errorMessage = 'An error occurred: ${e.message}';
+        }
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'An unexpected error occurred. Please try again.';
+      });
+    } finally {
+      setState(() {
+        _isLoading = false;
       });
     }
   }
@@ -59,7 +88,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'Şifremi Unuttum',
+          'Reset Password',
           style: GoogleFonts.ubuntu(
             color: Colors.white,
             fontWeight: FontWeight.bold,
@@ -74,14 +103,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     );
   }
 
-  // Form widget'ı
+  // Form widget
   Widget _buildForm() {
     return Form(
       key: _formKey,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Logo ve başlık
+          // Logo and title
           Text(
             'SUGYM+',
             style: GoogleFonts.ubuntu(
@@ -93,20 +122,38 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           ),
           const SizedBox(height: 40),
 
-          // Bilgi metni
+          // Info text
           Text(
-            'Lütfen hesabınızla ilişkili e-posta adresini girin. Size şifre sıfırlama bağlantısı içeren bir e-posta göndereceğiz.',
+            'Please enter the email address associated with your account. We will send you a password reset link.',
             style: GoogleFonts.ubuntu(fontSize: 16, color: Colors.grey),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 30),
 
-          // E-posta girişi
+          // Error message (if any)
+          if (_errorMessage.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.all(10),
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.9),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                _errorMessage,
+                style: GoogleFonts.ubuntu(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+
+          // Email input
           TextFormField(
             controller: _emailController,
             style: GoogleFonts.ubuntu(),
             decoration: InputDecoration(
-              labelText: 'E-posta Adresi',
+              labelText: 'Email Address',
               labelStyle: GoogleFonts.ubuntu(),
               border: const OutlineInputBorder(),
               prefixIcon: const Icon(Icons.email),
@@ -117,7 +164,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           ),
           const SizedBox(height: 30),
 
-          // Gönder düğmesi
+          // Submit button
           _isLoading
               ? const Center(child: CircularProgressIndicator())
               : ElevatedButton(
@@ -131,7 +178,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 ),
                 onPressed: _sendResetEmail,
                 child: Text(
-                  'Sıfırlama Bağlantısı Gönder',
+                  'Send Reset Link',
                   style: GoogleFonts.ubuntu(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -140,19 +187,19 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               ),
           const SizedBox(height: 20),
 
-          // Giriş sayfasına dönüş
+          // Back to login link
           TextButton(
             onPressed: () {
               Navigator.pushReplacementNamed(context, '/login');
             },
-            child: Text('Giriş Sayfasına Dön', style: GoogleFonts.ubuntu()),
+            child: Text('Back to Login', style: GoogleFonts.ubuntu()),
           ),
         ],
       ),
     );
   }
 
-  // Başarı mesajı widget'ı
+  // Success message widget
   Widget _buildSuccessMessage() {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -160,12 +207,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         const Icon(Icons.check_circle, color: Colors.green, size: 80),
         const SizedBox(height: 24),
         Text(
-          'Sıfırlama Bağlantısı Gönderildi',
+          'Reset Link Sent',
           style: GoogleFonts.ubuntu(fontSize: 24, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 16),
         Text(
-          'Şifre sıfırlama talimatları ${_emailController.text} adresine gönderildi. Lütfen e-postanızı kontrol edin.',
+          'Password reset instructions have been sent to ${_emailController.text}. Please check your email and follow the link to reset your password.',
           style: GoogleFonts.ubuntu(fontSize: 16, color: Colors.grey),
           textAlign: TextAlign.center,
         ),
@@ -183,7 +230,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             Navigator.pushReplacementNamed(context, '/login');
           },
           child: Text(
-            'Giriş Sayfasına Dön',
+            'Back to Login',
             style: GoogleFonts.ubuntu(
               fontSize: 16,
               fontWeight: FontWeight.bold,
@@ -194,4 +241,3 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     );
   }
 }
-

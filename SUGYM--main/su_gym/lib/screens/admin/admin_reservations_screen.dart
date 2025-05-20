@@ -159,9 +159,8 @@ class _AdminReservationsScreenState extends State<AdminReservationsScreen>
     }
   }
 
-  // Update reservation status
-  Future<void> _updateReservationStatus(
-      String reservationId, String newStatus) async {
+  // Approve reservation
+  Future<void> _approveReservation(String reservationId, String classId) async {
     try {
       // First get reservation details
       DocumentSnapshot reservationDoc = await FirebaseFirestore.instance
@@ -176,52 +175,84 @@ class _AdminReservationsScreenState extends State<AdminReservationsScreen>
       Map<String, dynamic> reservationData =
           reservationDoc.data() as Map<String, dynamic>;
       String oldStatus = reservationData['status'];
-      String classId = reservationData['classId'];
 
-      // Update reservation status
+      // Update reservation status to Approved
       await FirebaseFirestore.instance
           .collection('reservations')
           .doc(reservationId)
-          .update({'status': newStatus});
+          .update({'status': 'Approved'});
 
-      // Update class enrollment count (for approval or cancellation)
-      if (classId != null && classId.isNotEmpty) {
-        DocumentSnapshot classDoc = await FirebaseFirestore.instance
+      // If the reservation was previously pending, increment the enrolled count
+      if (oldStatus == 'Pending') {
+        await FirebaseFirestore.instance
             .collection('classes')
             .doc(classId)
-            .get();
-
-        if (classDoc.exists) {
-          // If old status is 'Pending' and new status is 'Approved', increment enrolled count
-          if (oldStatus == 'Pending' && newStatus == 'Approved') {
-            await FirebaseFirestore.instance
-                .collection('classes')
-                .doc(classId)
-                .update({'enrolled': FieldValue.increment(1)});
-          }
-          // If old status is 'Approved' and new status is 'Cancelled', decrement enrolled count
-          else if (oldStatus == 'Approved' && newStatus == 'Cancelled') {
-            await FirebaseFirestore.instance
-                .collection('classes')
-                .doc(classId)
-                .update({'enrolled': FieldValue.increment(-1)});
-          }
-        }
+            .update({'enrolled': FieldValue.increment(1)});
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Reservation status updated to $newStatus'),
+        const SnackBar(
+          content: Text('Reservation approved successfully'),
           backgroundColor: Colors.green,
         ),
       );
 
       // No need to reload reservations manually, we have real-time listener
     } catch (e) {
-      print('Error updating reservation: $e');
+      print('Error approving reservation: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error updating reservation: $e'),
+          content: Text('Error approving reservation: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  // Cancel reservation (update to Cancelled status)
+  Future<void> _cancelReservation(String reservationId, String classId) async {
+    try {
+      // First get reservation details
+      DocumentSnapshot reservationDoc = await FirebaseFirestore.instance
+          .collection('reservations')
+          .doc(reservationId)
+          .get();
+
+      if (!reservationDoc.exists) {
+        throw Exception('Reservation not found');
+      }
+
+      Map<String, dynamic> reservationData =
+          reservationDoc.data() as Map<String, dynamic>;
+      String oldStatus = reservationData['status'];
+
+      // Update reservation status to Cancelled
+      await FirebaseFirestore.instance
+          .collection('reservations')
+          .doc(reservationId)
+          .update({'status': 'Cancelled'});
+
+      // If the reservation was previously approved, decrement the enrolled count
+      if (oldStatus == 'Approved') {
+        await FirebaseFirestore.instance
+            .collection('classes')
+            .doc(classId)
+            .update({'enrolled': FieldValue.increment(-1)});
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Reservation cancelled successfully'),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      // No need to reload reservations manually, we have real-time listener
+    } catch (e) {
+      print('Error cancelling reservation: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error cancelling reservation: $e'),
           backgroundColor: Colors.red,
         ),
       );
@@ -389,8 +420,9 @@ class _AdminReservationsScreenState extends State<AdminReservationsScreen>
     );
   }
 
-  // Reservation item widget
+  // Reservation item widget - simplified to match your UI
   Widget _buildReservationItem(Map<String, dynamic> reservation) {
+    // Check if this is the selected reservation (showing details)
     // Status color
     Color statusColor;
     switch (reservation['status']) {
@@ -407,137 +439,153 @@ class _AdminReservationsScreenState extends State<AdminReservationsScreen>
         statusColor = Colors.grey;
     }
 
-    // Format date and time
-    String formattedDate =
-        DateFormat('EEE, MMM d, yyyy').format(reservation['date']);
-    bool isPastReservation = reservation['date'].isBefore(DateTime.now());
+    // Formatted date
+    final reservationDate = reservation['date'] as DateTime;
+    final formattedDate =
+        DateFormat('EEE, MMM d, yyyy').format(reservationDate);
 
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: ExpansionTile(
-        leading: CircleAvatar(
-          backgroundColor: Colors.purple.shade100,
-          child: const Icon(Icons.event, color: Colors.purple),
-        ),
-        title: Text(
-          reservation['className'],
-          style: GoogleFonts.ubuntu(fontWeight: FontWeight.bold),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-                '$formattedDate · ${reservation['startTime']} - ${reservation['endTime']}'),
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: statusColor),
-                  ),
-                  child: Text(
-                    reservation['status'],
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: statusColor,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-        trailing: Icon(
-          Icons.chevron_right,
-          color: Colors.grey.shade400,
-        ),
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // User details
-                _buildDetailRow('User', reservation['username']),
-                if (reservation['userEmail'].isNotEmpty)
-                  _buildDetailRow('Email', reservation['userEmail']),
-                _buildDetailRow('Reservation ID', reservation['id']),
-                _buildDetailRow(
-                    'Created',
-                    DateFormat('dd/MM/yyyy HH:mm')
-                        .format(reservation['createdAt'])),
+    // Check if reservation is in the past
+    final isPastReservation = reservationDate.isBefore(DateTime.now());
 
-                const SizedBox(height: 16),
-                const Divider(),
-                const SizedBox(height: 16),
-
-                // Action buttons
-                if (!isPastReservation)
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      if (reservation['status'] == 'Pending')
-                        ElevatedButton.icon(
-                          icon: const Icon(Icons.check),
-                          label: const Text('Approve'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            foregroundColor: Colors.white,
-                          ),
-                          onPressed: () {
-                            _updateReservationStatus(
-                                reservation['id'], 'Approved');
-                          },
-                        ),
-                      const SizedBox(width: 8),
-                      if (reservation['status'] != 'Cancelled')
-                        OutlinedButton.icon(
-                          icon: const Icon(Icons.cancel, color: Colors.red),
-                          label: const Text('Cancel',
-                              style: TextStyle(color: Colors.red)),
-                          onPressed: () {
-                            _updateReservationStatus(
-                                reservation['id'], 'Cancelled');
-                          },
-                        ),
-                    ],
-                  ),
-              ],
-            ),
+    return Column(
+      children: [
+        // First part - always visible, similar to what's in your UI
+        ListTile(
+          leading: CircleAvatar(
+            backgroundColor: Colors.purple.shade100,
+            child: const Icon(Icons.calendar_today, color: Colors.purple),
           ),
-        ],
-      ),
-    );
-  }
-
-  // Detail row widget
-  Widget _buildDetailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 100,
+          title: Text(
+            reservation['className'],
+            style: GoogleFonts.ubuntu(fontWeight: FontWeight.bold),
+          ),
+          subtitle: Text(
+            'Tue, May 20, 2025 · ${reservation['startTime']} - ${reservation['endTime']}',
+            style: GoogleFonts.ubuntu(),
+          ),
+          trailing: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: statusColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: statusColor),
+            ),
             child: Text(
-              label,
-              style: GoogleFonts.ubuntu(
+              reservation['status'],
+              style: TextStyle(
+                color: statusColor,
                 fontWeight: FontWeight.bold,
-                color: Colors.grey.shade700,
               ),
             ),
           ),
-          Expanded(
+          onTap: () {
+            // Show a dialog with details and action buttons
+            _showReservationActions(reservation);
+          },
+        ),
+        const Divider(),
+      ],
+    );
+  }
+
+  // Show a dialog with reservation details and actions
+  void _showReservationActions(Map<String, dynamic> reservation) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          'Reservation Details',
+          style: GoogleFonts.ubuntu(fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Class info
+            Text(
+              reservation['className'],
+              style: GoogleFonts.ubuntu(
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Time: ${reservation['startTime']} - ${reservation['endTime']}',
+              style: GoogleFonts.ubuntu(),
+            ),
+            const SizedBox(height: 16),
+
+            // User info
+            Text(
+              'User Information',
+              style: GoogleFonts.ubuntu(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text('Username: ${reservation['username']}'),
+            Text('Email: ${reservation['userEmail']}'),
+            const SizedBox(height: 16),
+
+            // Reservation info
+            Text(
+              'Reservation Information',
+              style: GoogleFonts.ubuntu(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text('ID: ${reservation['id']}'),
+            Text('Status: ${reservation['status']}'),
+            Text(
+                'Created: ${DateFormat('dd/MM/yyyy HH:mm').format(reservation['createdAt'])}'),
+          ],
+        ),
+        actions: [
+          // Close button
+          TextButton(
+            onPressed: () => Navigator.pop(context),
             child: Text(
-              value,
+              'Close',
               style: GoogleFonts.ubuntu(),
             ),
           ),
+
+          // Action buttons based on status
+          if (reservation['status'] == 'Pending')
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () {
+                Navigator.pop(context);
+                _approveReservation(reservation['id'], reservation['classId']);
+              },
+              child: Text(
+                'Approve',
+                style: GoogleFonts.ubuntu(),
+              ),
+            ),
+
+          if (reservation['status'] != 'Cancelled')
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () {
+                Navigator.pop(context);
+                _cancelReservation(reservation['id'], reservation['classId']);
+              },
+              child: Text(
+                'Cancel',
+                style: GoogleFonts.ubuntu(),
+              ),
+            ),
         ],
       ),
     );

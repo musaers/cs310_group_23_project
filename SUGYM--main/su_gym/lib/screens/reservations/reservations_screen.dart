@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'dart:async';
 import '../../services/service_provider.dart';
 
 class ReservationsScreen extends StatefulWidget {
@@ -22,14 +23,24 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
   DateTime _selectedDate = DateTime.now(); // Default to today
   bool _isCreatingReservation = false; // Reservation creation state
 
+  // Firestore listener subscription
+  StreamSubscription<QuerySnapshot>? _reservationsSubscription;
+
   @override
   void initState() {
     super.initState();
     // Check arguments after page is loaded
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkArguments();
-      _loadReservations();
+      _setupReservationsListener();
     });
+  }
+
+  @override
+  void dispose() {
+    // Cancel the stream subscription
+    _reservationsSubscription?.cancel();
+    super.dispose();
   }
 
   // Check page arguments
@@ -72,8 +83,11 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     return today.add(Duration(days: daysToAdd));
   }
 
-  // Load user's reservations from Firestore
-  Future<void> _loadReservations() async {
+  // Setup real-time Firestore listener
+  void _setupReservationsListener() {
+    // Cancel previous subscription if exists
+    _reservationsSubscription?.cancel();
+
     setState(() {
       _isLoading = true;
       _errorMessage = '';
@@ -85,45 +99,61 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
         throw Exception('User not logged in');
       }
 
-      final QuerySnapshot snapshot = await FirebaseFirestore.instance
+      // Set up real-time listener for user's reservations
+      _reservationsSubscription = FirebaseFirestore.instance
           .collection('reservations')
           .where('userId', isEqualTo: user.uid)
           .orderBy('date', descending: false)
-          .get();
+          .snapshots()
+          .listen(
+        (snapshot) {
+          final List<Map<String, dynamic>> reservations =
+              snapshot.docs.map((doc) {
+            Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
 
-      print('Loading reservations... Found: ${snapshot.docs.length}');
+            // Convert Firestore Timestamp to DateTime
+            DateTime date = DateTime.now();
+            if (data['date'] != null && data['date'] is Timestamp) {
+              date = (data['date'] as Timestamp).toDate();
+            }
 
-      final List<Map<String, dynamic>> reservations = snapshot.docs.map((doc) {
-        Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+            return {
+              'id': doc.id,
+              'userId': data['userId'] ?? '',
+              'classId': data['classId'] ?? '',
+              'className': data['className'] ?? '',
+              'startTime': data['startTime'] ?? '',
+              'endTime': data['endTime'] ?? '',
+              'day': data['day'] ?? '',
+              'date': date,
+              'status': data['status'] ?? 'Pending',
+              'createdAt': data['createdAt'] != null
+                  ? (data['createdAt'] as Timestamp).toDate()
+                  : DateTime.now(),
+            };
+          }).toList();
 
-        // Convert Firestore Timestamp to DateTime
-        DateTime date = DateTime.now();
-        if (data['date'] != null && data['date'] is Timestamp) {
-          date = (data['date'] as Timestamp).toDate();
-        }
+          if (mounted) {
+            setState(() {
+              _reservations = reservations;
+              _isLoading = false;
+            });
+          }
 
-        return {
-          'id': doc.id,
-          'userId': data['userId'] ?? '',
-          'classId': data['classId'] ?? '',
-          'className': data['className'] ?? '',
-          'startTime': data['startTime'] ?? '',
-          'endTime': data['endTime'] ?? '',
-          'day': data['day'] ?? '',
-          'date': date,
-          'status': data['status'] ?? 'Pending',
-          'createdAt': data['createdAt'] != null
-              ? (data['createdAt'] as Timestamp).toDate()
-              : DateTime.now(),
-        };
-      }).toList();
-
-      setState(() {
-        _reservations = reservations;
-        _isLoading = false;
-      });
+          print('Reservations updated: ${reservations.length} items');
+        },
+        onError: (error) {
+          print('Error listening to reservations: $error');
+          if (mounted) {
+            setState(() {
+              _errorMessage = 'Failed to load reservations: $error';
+              _isLoading = false;
+            });
+          }
+        },
+      );
     } catch (e) {
-      print('Error loading reservations: $e');
+      print('Error setting up reservation listener: $e');
       setState(() {
         _errorMessage = 'Failed to load reservations: $e';
         _isLoading = false;
@@ -182,8 +212,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
         ),
       );
 
-      // Reload reservations
-      _loadReservations();
+      // No need to manually reload reservations, we have real-time listener
 
       // Clear selected class after successful reservation
       setState(() {
@@ -274,8 +303,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
         ),
       );
 
-      // Reload reservations
-      _loadReservations();
+      // No need to manually reload reservations, we have real-time listener
     } catch (e) {
       print('Error cancelling reservation: $e');
       ScaffoldMessenger.of(context).showSnackBar(
@@ -359,7 +387,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
             ),
             const SizedBox(height: 20),
             ElevatedButton(
-              onPressed: _loadReservations,
+              onPressed: _setupReservationsListener,
               child: Text(
                 'Try Again',
                 style: GoogleFonts.ubuntu(),

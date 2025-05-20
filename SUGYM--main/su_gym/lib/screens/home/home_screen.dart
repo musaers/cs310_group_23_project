@@ -2,7 +2,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'dart:async';
 import '../../services/service_provider.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -24,42 +26,53 @@ class _HomeScreenState extends State<HomeScreen> {
     (index) => DateTime.now().add(Duration(days: index)),
   );
 
+  // Dersler ve kullanıcı profili için stream subscriptions
+  StreamSubscription<QuerySnapshot>? _classesSubscription;
+  StreamSubscription<DocumentSnapshot>? _userSubscription;
+  
   // Dinamik olarak yüklenecek ders listesi
   List<Map<String, dynamic>> _classes = [];
 
   @override
   void initState() {
     super.initState();
-    _loadUserData();
-    _loadClasses();
+    _setupUserListener();
+    _setupClassesListener();
+  }
+  
+  @override
+  void dispose() {
+    // Stream subscription'ları kapat
+    _classesSubscription?.cancel();
+    _userSubscription?.cancel();
+    super.dispose();
   }
 
-  // Kullanıcı verilerini yükleme
-  Future<void> _loadUserData() async {
-    try {
-      final currentUser = context.authService.currentUser;
-      if (currentUser != null) {
-        // Firestore'dan kullanıcı bilgilerini al
-        DocumentSnapshot userDoc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(currentUser.uid)
-            .get();
-
-        if (userDoc.exists) {
-          Map<String, dynamic> userData =
-              userDoc.data() as Map<String, dynamic>;
-          setState(() {
-            _username = userData['username'] ?? "User";
-          });
-        }
-      }
-    } catch (e) {
-      print('Kullanıcı verileri yüklenirken hata: $e');
+  // Kullanıcı verilerini dinleme
+  void _setupUserListener() {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser != null) {
+      _userSubscription = FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser.uid)
+          .snapshots()
+          .listen(
+        (userDoc) {
+          if (userDoc.exists) {
+            setState(() {
+              _username = userDoc['username'] ?? "User";
+            });
+          }
+        },
+        onError: (error) {
+          print('Error listening to user data: $error');
+        },
+      );
     }
   }
 
-  // Firebase'den dersleri yükleme
-  Future<void> _loadClasses() async {
+  // Dersleri dinleme
+  void _setupClassesListener() {
     setState(() {
       _isLoading = true;
       _errorMessage = '';
@@ -69,52 +82,56 @@ class _HomeScreenState extends State<HomeScreen> {
       // Seçili günün adını al
       final selectedDay = DateFormat('EEEE').format(_weekDays[_selectedIndex]);
 
-      // Firestore'dan dersleri çek - seçili güne göre filtrele
-      final QuerySnapshot snapshot = await FirebaseFirestore.instance
+      // Cancel previous subscription if exists
+      _classesSubscription?.cancel();
+
+      // Firestore listener kurulumu
+      _classesSubscription = FirebaseFirestore.instance
           .collection('classes')
           .where('day', isEqualTo: selectedDay)
           .orderBy('startTime')
-          .get();
+          .snapshots()
+          .listen(
+        (snapshot) {
+          final List<Map<String, dynamic>> loadedClasses = snapshot.docs.map((doc) {
+            Map<String, dynamic> data = doc.data();
+            
+            return {
+              'id': doc.id,
+              'name': data['name'] ?? '',
+              'startTime': data['startTime'] ?? '',
+              'endTime': data['endTime'] ?? '',
+              'day': data['day'] ?? '',
+              'trainer': data['trainer'] ?? '',
+              'capacity': data['capacity'] ?? 0,
+              'enrolled': data['enrolled'] ?? 0,
+              'description': data['description'] ?? '',
+              'intensity': data['intensity'] ?? '',
+              'calories': data['calories'] ?? '',
+              'location': data['location'] ?? '',
+              'status': 'upcoming', // Varsayılan durum
+            };
+          }).toList();
 
-      print('Günlük dersler yükleniyor. Gün: $selectedDay');
-      print('Bulunan ders sayısı: ${snapshot.docs.length}');
-
-      // Verileri işle ve _classes listesine ekle
-      final List<Map<String, dynamic>> loadedClasses = snapshot.docs.map((doc) {
-        Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
-
-        return {
-          'id': doc.id,
-          'name': data['name'] ?? '',
-          'startTime': data['startTime'] ?? '',
-          'endTime': data['endTime'] ?? '',
-          'day': data['day'] ?? '',
-          'trainer': data['trainer'] ?? '',
-          'capacity': data['capacity'] ?? 0,
-          'enrolled': data['enrolled'] ?? 0,
-          'description': data['description'] ?? '',
-          'intensity': data['intensity'] ?? '',
-          'calories': data['calories'] ?? '',
-          'location': data['location'] ?? '',
-          'status': 'upcoming', // Varsayılan durum
-        };
-      }).toList();
-
-      setState(() {
-        _classes = loadedClasses;
-        _isLoading = false;
-      });
-
-      if (_classes.isEmpty) {
-        print('Seçili gün için ders bulunamadı: $selectedDay');
-      } else {
-        print('${_classes.length} ders başarıyla yüklendi');
-      }
+          setState(() {
+            _classes = loadedClasses;
+            _isLoading = false;
+          });
+          
+          print('Home screen: Loaded ${_classes.length} classes for $selectedDay');
+        },
+        onError: (error) {
+          print('Error listening to classes: $error');
+          setState(() {
+            _errorMessage = 'Dersler yüklenirken bir hata oluştu. Lütfen tekrar deneyin.';
+            _isLoading = false;
+          });
+        },
+      );
     } catch (e) {
-      print('Dersler yüklenirken hata: $e');
+      print('Error setting up class listener: $e');
       setState(() {
-        _errorMessage =
-            'Dersler yüklenirken bir hata oluştu. Lütfen tekrar deneyin.';
+        _errorMessage = 'Dersler yüklenirken bir hata oluştu. Lütfen tekrar deneyin.';
         _isLoading = false;
       });
     }
@@ -125,7 +142,7 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _selectedIndex = index;
     });
-    _loadClasses(); // Yeni tarihe göre dersleri yükle
+    _setupClassesListener(); // Yeni tarihe göre dersleri yükle
   }
 
   @override
@@ -206,7 +223,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         const SizedBox(height: 16),
                         ElevatedButton(
-                          onPressed: _loadClasses,
+                          onPressed: _setupClassesListener,
                           child: Text(
                             'Tekrar Dene',
                             style: GoogleFonts.ubuntu(),

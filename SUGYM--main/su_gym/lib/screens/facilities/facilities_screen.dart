@@ -1,4 +1,4 @@
-// lib/screens/facilities/facilities_screen.dart
+
 import 'package:flutter/material.dart';
 
 class FacilitiesScreen extends StatelessWidget {

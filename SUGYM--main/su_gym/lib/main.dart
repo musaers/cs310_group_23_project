@@ -1,24 +1,41 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_analytics/firebase_analytics.dart';
+import 'firebase_options.dart';
 import 'routes.dart';
+import 'services/service_provider.dart';
 
-void main() {
-  runApp(const MyApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Firebase'i başlat
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // Firebase Analytics'i başlat
+  FirebaseAnalytics analytics = FirebaseAnalytics.instance;
+
+  runApp(ServiceProvider(child: MyApp(analytics: analytics)));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final FirebaseAnalytics analytics;
+
+  const MyApp({Key? key, required this.analytics}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
+    // Analytics Observer oluştur
+    FirebaseAnalyticsObserver observer = FirebaseAnalyticsObserver(
+      analytics: analytics,
+    );
+
     return MaterialApp(
       title: 'SUGYM+',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         primarySwatch: Colors.blue,
-        // Tüm metin temaları için Ubuntu fontunu ayarlama
         textTheme: GoogleFonts.ubuntuTextTheme(Theme.of(context).textTheme),
-        // Butonlar vb. için Ubuntu fontunu ayarlama
         primaryTextTheme: GoogleFonts.ubuntuTextTheme(
           Theme.of(context).primaryTextTheme,
         ),
@@ -29,8 +46,9 @@ class MyApp extends StatelessWidget {
           elevation: 0,
         ),
       ),
-      initialRoute: '/login', // Başlangıç rotası login olarak ayarlandı
+      initialRoute: '/',
       routes: appRoutes,
+      navigatorObservers: [observer],
     );
   }
 }
